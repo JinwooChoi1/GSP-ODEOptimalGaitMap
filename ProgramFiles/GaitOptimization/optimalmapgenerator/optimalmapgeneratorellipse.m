@@ -1,4 +1,4 @@
-function y=optimalmapgenerator(s,dimension,npoints,a,lb,ub,stretch,direction,costfunction,handles)
+function y=optimalmapgeneratorellipse(s,dimension,npoints,a,lb,ub,stretch,direction,costfunction,handles)
 %%%%%%%%%%%%%%
 % This function takes an input gait and runs fmincon to find the neareast locally
 % optimal gait
@@ -63,7 +63,7 @@ end
 objective_function_gradient = @(x) solvedifffmincon_ellipse_gait(x,s,npoints,dimension,direction,lb,ub,writerObj);
 constraint_function = @(x) nonlcon_ellipse_gait(x,s,npoints,dimension,lb,ub,direction);
 
-[x0, ~,~,~]=fmincon(objective_function_gradient,[1;1],A,b,Aeq,beq,lb1,ub1,constraint_function,options);
+[x0, ~,~,~]=fmincon(objective_function_gradient,[2;2],A,b,Aeq,beq,lb1,ub1,constraint_function,options);
 odeoption=odeset('Events',@(t,x) event_optimal_map_ellipse_gait(x,s,npoints,dimension,direction));
 ode_fun = @(t,x) ode_optimal_map_ellipse_gait(x,s,npoints,dimension,direction);
 

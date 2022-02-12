@@ -1,4 +1,4 @@
-function ydot=ode_optimal_map(y,s,n,dimension,direction,~,~,~)%,lb,ub,writerObj)
+function ydot=ode_optimal_map(y,s,n,dimension,direction,nfparam)%,lb,ub,writerObj)
 %%%%%%%%%%%%%
 % This function calculates efficiency (or displacement, if
 % that is the objective function) and its gradient with respect to the coefficients obtained
@@ -23,35 +23,60 @@ function ydot=ode_optimal_map(y,s,n,dimension,direction,~,~,~)%,lb,ub,writerObj)
 % 
 % ydot :
 %%%%%%%%%%%%%
-
-global bestCost bestDisp bestEff;
-
+ 
 % Because of ODE solver, size of y is [10*dimension 1]
-y=reshape(y,[10 dimension]); 
+y=reshape(y,[nfparam dimension]); 
 
-jacobfourier = evaluate_jacobian_fourier(y,s,n,dimension,direction);
+[jacobfourier,disp,cost] = evaluate_jacobian_fourier(y,s,n,dimension,direction);
+
+%% Record the fourier coefficient at step-optimal gaits.
+
+global currentDisp bestDisp stepOptimalGaits;
+
+curDispPer= disp/bestDisp;
+prevDispPer = currentDisp/bestDisp;
+if abs(curDispPer - 3/4) < abs(prevDispPer - 3/4)...
+    && abs(curDispPer - 3/4) < 1e-2
+    stepOptimalGaits{2,1} = reshape(y,[nfparam dimension]);
+    stepOptimalGaits{2,2} = [disp,cost];
+    stepOptimalGaits{2,3} = [jacobfourier.disp jacobfourier.stroke];
+elseif abs(curDispPer - 2/4) < abs(prevDispPer - 2/4)...
+    && abs(curDispPer - 2/4) < 1e-2
+    stepOptimalGaits{3,1} = reshape(y,[nfparam dimension]);
+    stepOptimalGaits{3,2} = [disp,cost];
+    stepOptimalGaits{3,3} = [jacobfourier.disp jacobfourier.stroke];
+elseif abs(curDispPer - 1/4) < abs(prevDispPer - 1/4)...
+    && abs(curDispPer - 1/4) < 1e-2
+    stepOptimalGaits{4,1} = reshape(y,[nfparam dimension]);
+    stepOptimalGaits{4,2} = [disp,cost];
+    stepOptimalGaits{4,3} = [jacobfourier.disp jacobfourier.stroke];
+end
+
+currentDisp = disp;
 
 %% calcuating ydot so that lagrange equation is zero.
-    gradfourier = struct();
-    % Reshape jacobdisp and jacobstorke for ODE Solver.
-    gradfourier.disp = reshape(jacobfourier.disp,[9*dimension 1]);
-    gradfourier.stroke = reshape(jacobfourier.stroke,[9*dimension 1]);
+gradfourier = struct();
 
-    % Calculate the lagrange multiplier at the current fourier coefficient.
-    lambda = pinv(gradfourier.disp)*gradfourier.stroke;
+% Reshape jacobdisp and jacobstorke for ODE Solver.
+for i = 1:dimension
+    gradfourier.disp = reshape(jacobfourier.disp,[(nfparam-1)*dimension 1]);
+    gradfourier.stroke = reshape(jacobfourier.stroke,[(nfparam-1)*dimension 1]);
+end
+% Calculate the lagrange multiplier at the current fourier coefficient.
+lambda = pinv(gradfourier.disp)*gradfourier.stroke;
 
-    % The ODE is the gradient of the lagrange equation with slight offset
-    % of the lagrange multiplier.
-    ydot = gradfourier.stroke-(1-0.02)*lambda*gradfourier.disp;
+% The ODE is the gradient of the lagrange equation with slight offset
+% of the lagrange multiplier.
+ydot = gradfourier.stroke-(1-0.02)*lambda*gradfourier.disp;
 
-    % The gradient should move regardless of norm of it.
-    ydot = -ydot/norm(ydot);
-    if isnan(ydot)
-        ydot = zeros(size(ydot));
-    end
-    
-    % The frequency should not change.
-    ydot = reshape(ydot,[9 dimension]);
-    ydot = [ydot; zeros(1,dimension)];
-    ydot = reshape(ydot,[10*dimension 1]);
+% The gradient should move toward shirinking the parameter.
+ydot = -ydot;
+if isnan(ydot)
+    ydot = zeros(size(ydot));
+end
+
+% The frequency should not change.
+ydot = reshape(ydot,[nfparam - 1 dimension]);
+ydot = [ydot; zeros(1,dimension)];
+ydot = reshape(ydot,[nfparam*dimension 1]);
 end

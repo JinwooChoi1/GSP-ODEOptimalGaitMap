@@ -27,255 +27,56 @@ T = 2*pi;
 % Define phi_def = [alpha1, alpha2] as a function of time t such that the
 % array returns the shape variables given by the fourier coefficients at a
 % time t
+len_x=length(x);
+
 p = make_ellipse_gait(x);
-afactor=0.001;
-
-y = [p.phi_def{1}(linspace(0,T,n).') p.phi_def{2}(linspace(0,T,n).')];
-
-% % Uncomment this section to verify that the shape variables and derivatives
-% % have been derived appropriately
-% valid = verify_shape_equations(p);
-% valid_M = verify_mass_derivative(s);
-% validate_cost_gradient(s,n,y,T,p);
-
+dx = 1e-6;
+if len_x == 2
+    dp1 = make_ellipse_gait([x(1)+dx;x(2)]);
+    dp2 = make_ellipse_gait([x(1);x(2)+dx]);
+elseif len_x == 3
+    dp1 = make_ellipse_gait([x(1)+dx;x(2);x(3)]);
+    dp2 = make_ellipse_gait([x(1);x(2)+dx;x(3)]);
+    dp3 = make_ellipse_gait([x(1);x(2);x(3)+dx]);
+end
 % Calculate displacement, cost and efficiency of a gait
 % Note that, for inertial cost, cost is returned as the integral of torque
 % squared, while for drag-based systems, cost is the path length of the
 % gait
+dcost = zeros(len_x,1);
 [~, net_disp_opt, cost] = evaluate_displacement_and_cost1(s,p,[0, T],'interpolated','fixed_step');
-lineint=net_disp_opt(direction); % displacement produced in the chosen direction produced on executing the gait measured in the optimal coordinates 
+[~, dnet_disp_opt1, dcost(1)] = evaluate_displacement_and_cost1(s,dp1,[0, T],'interpolated','fixed_step');
+[~, dnet_disp_opt2, dcost(2)] = evaluate_displacement_and_cost1(s,dp2,[0, T],'interpolated','fixed_step');
+disp=net_disp_opt(direction); % displacement produced in the chosen direction produced on executing the gait measured in the optimal coordinates 
+ddisp = [dnet_disp_opt1(direction);dnet_disp_opt2(direction)];
 
-% Assign value for totalstroke, i.e. the cost metric used for efficiency
-% calculation
-if strcmpi(s.costfunction,'torque') || strcmpi(s.costfunction,'covariant acceleration') || strcmpi(s.costfunction,'acceleration coord') || strcmpi(s.costfunction,'power quality')
-    % With cost as time period, period of the gait is the cost to execute
-    % the gait at unit torque squared to the 1/4th power
-    totalstroke = cost^(1/4);
-else
-    % Drag systems have cost as path length, so no modification is needed
-    totalstroke = cost;
+if len_x == 3
+    [~, dnet_disp_opt3, dcost(3)] = evaluate_displacement_and_cost1(s,dp3,[0, T],'interpolated','fixed_step');
+    ddisp = [ddisp;dnet_disp_opt3(direction)];
 end
 
-% If efficiency is negative, reversing the order of points so that
-% efficiency is positive
-if lineint<0
-    lineint= -lineint;
-    ytemp=y;
-    for i=1:n
-        y(i,:)=ytemp(n+1-i,:);
-    end
-    invert=1;
-else
-    invert=0;
+%% calcuating ydot so that lagrange equation is zero.
+grad = struct();
+
+% Calculate the gradient of 
+grad.disp = (ddisp-disp)/dx;
+grad.stroke = (dcost-cost)/dx;
+
+% Calculate the lagrange multiplier at the current fourier coefficient.
+lambda = pinv(grad.disp)*grad.stroke;
+
+% The ODE is the gradient of the lagrange equation with slight offset
+% of the lagrange multiplier.
+xdot = grad.stroke-(1-0.02)*lambda*grad.disp;
+
+% The gradient should move toward shirinking the parameter.
+xdot = -xdot;
+if isnan(xdot)
+    xdot = zeros(size(xdot));
 end
-
-%% Preliminaries for gradient calculation
-% Preallocating memory for variables which we will need in further
-% calculation 
-yvalues=cell(n,dimension); % Cell representation of the coordinates of all points forming the gait
-interpstateccf=cell(1,dimension); % Variable which will store the ccf function grid used for interpolation
-interpmetricgrid=cell(1,dimension);  % Variable which will store the metric grid used for interpolation
-ccf=zeros(n,dimension*(dimension-1)/2); % Variable which will store ccf function at each point
-metric1=zeros(n,dimension,dimension); % Variable which will store metric at each point in the form of a matrix
-metric = repmat({zeros(dimension)},[n 1]); % Variable which stores the metric at each point in the form of a 2x2 matrix
-metricgrad1=zeros(n,dimension,dimension,dimension); % Variable which will store gradient of metric at each point in the form of a matrix
-metricgrad = repmat({zeros(dimension)},[n,dimension]); % Variable which will store gradient of metric at each point in the form of a matrix
-
-% Interpolation to calculate all the variables needed for gradient
-% calculation
-for i=1:1:n
-    for j=1:1:dimension
-        yvalues{i,j}=y(i,j);
-    end
+if ~isreal(xdot)
+    1
 end
-
-y_for_interp = mat2cell(y,size(y,1),ones(1,size(y,2)));
-
-for j=1:1:dimension
-    interpstateccf{j}=s.grid.eval{j,1};
-    interpmetricgrid{j}=s.grid.metric_eval{j,1};
-end
-
-for j=1:dimension*(dimension-1)/2
-    ccf(:,j)=interpn(interpstateccf{:},s.DA_optimized{direction,j},y_for_interp{:},'spline');
-end
-
-for j=1:1:dimension
-    for k=1:1:dimension
-        metric1(:,j,k)=interpn(interpmetricgrid{:},s.metricfield.metric_eval.content.metric{j,k},y_for_interp{:},'spline');
-    end
-end
-
-if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'acceleration coord')
-    for i=1:n
-       metric{i}=eye(dimension);
-    end
-elseif strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-    for i=1:n
-        for j=1:1:dimension
-           for k=1:1:dimension
-               metric{i}(j,k)=metric1(i,j,k);
-           end
-        end
-    end
-end
-if strcmpi(s.costfunction,'pathlength metric2')
-    for i = 1:n
-        metric{i} = metric{i}*metric{i};
-    end
-end
-
-if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'acceleration coord')
-    for i=1:dimension
-        for j=1:n
-            metricgrad{j,i} = zeros(dimension);
-        end
-    end
-elseif strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-    y2 = zeros(size(y));
-    y1 = y2;
-    for l=1:1:dimension
-        for m=1:1:dimension
-            if m==l
-               y2(:,m)=y(:,m)+afactor*ones(length(y),1);
-               y1(:,m)=y(:,m)-afactor*ones(length(y),1);
-            else
-               y2(:,m)=y(:,m);
-               y1(:,m)=y(:,m);
-            end
-        end
-        y2_for_interp = mat2cell(y2,size(y,1),ones(1,size(y,2)));
-        y1_for_interp = mat2cell(y1,size(y,1),ones(1,size(y,2)));
-        for j=1:1:dimension
-            for k=1:1:dimension
-                metricgrad1(:,l,j,k)=(interpn(interpmetricgrid{:},s.metricfield.metric_eval.content.metric{j,k},y2_for_interp{:},'spline')...
-                    -interpn(interpmetricgrid{:},s.metricfield.metric_eval.content.metric{j,k},y1_for_interp{:},'spline'))/(2*afactor);
-            end
-        end
-        for i=1:n
-            for j=1:1:dimension
-                for k=1:1:dimension
-                    metricgrad{i,l}(j,k)=metricgrad1(i,l,j,k);
-                end
-            end
-        end
-    end
-end
-if strcmpi(s.costfunction,'pathlength metric2')
-    for l = 1:dimension
-        for i = 1:n
-            metricgrad{i,l} = metricgrad{i,l}*metric{i}+metric{i}*metricgrad{i,l};
-        end
-    end
-end
-
-%% changey/dcoeff tells us how much each point moves when a fourier series variable is changed
-% chy is a cell with as many entries as the dimension of the shape space
-% ith element of chy is a matrix where the (j,k)th entry tells us the change in the ith coordinate
-% of the kth point of the gait resulting from a unit change in the jth
-% fourier coefficient corresponding to the ith dimension of the shape space
-
-chy=cell(dimension,1);
-% Create vector of time values at which to evaluate points of gait
-t = linspace(0,T,n);
-for j=1:1:n
-    chy{1}(:,j)=[cos(t(j))*cos(pi/4); -sin(t(j))*sin(pi/4)];
-    chy{2}(:,j)=[cos(t(j))*sin(pi/4); sin(t(j))*cos(pi/4)];
-end
-
-%% Jacobianstroke is the gradient of cost. 
-%Contrigrad is the contribution to the gradient due to the metric changing
-switch s.costfunction
-    case {'pathlength metric','pathlength coord','pathlength metric2'}
-        % Get the gradient of cost based on drag-dominated system
-        jacobianstroke = jacobianstrokecalculator(y,n,dimension,metric,metricgrad);
-    case {'torque','covariant acceleration','acceleration coord','power quality'}
-        % Get the gradient of cost based on inertia-dominated system
-        inertia_cost_grad = inertia_cost_gradient(s,n,coeff,T,p,'discrete');
-        
-        % With cost as time period to execute the gait, the gradient of
-        % cost for inertial systems is the gradient of cost with period 1
-        % divided by (4*T^3)
-        inertia_cost_grad = inertia_cost_grad./(4*totalstroke^3);
-    otherwise
-        error('Unexpected system type at cost gradient calculation!')
-end
-
-%% Jacobiandisp is the gradient of displacement.
-% jacobiandispcalculator3 is the function that calculates the gradient of 
-% displacement for the ith point. It's input arguments are the coordinates of 
-% the (i-1)th, ith and (i+1)th point, CCF value at point i and the dimension of     
-% the shape space (dimension)
-
-jacobiandisp = zeros(n,dimension);
-for i=2:1:n-1
-    jacobiandisp(i,:)=jacobiandispcalculator3(y(i-1,:),y(i,:),y(i+1,:),ccf(i,:),dimension);
-end
-jacobiandisp(1,:)=jacobiandispcalculator3(y(n,:),y(1,:),y(2,:),ccf(1,:),dimension);
-jacobiandisp(n,:)=jacobiandispcalculator3(y(n-1,:),y(n,:),y(1,:),ccf(n,:),dimension);
-
-%% Jacobianeqi is the concentration gradient. 
-%It is the term that keeps points eqi distant from each other and prevents crossover of gait.
-
-jacobianeqi = jacobianeqicalculator(y,n,dimension,metric);
-
-%% properly ordering gradients depending on wether lineint was negative or positive
-if invert
-        jacobiandisptemp=jacobiandisp;
-        if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-                jacobianstroketemp=jacobianstroke;
-        end
-        jacobianeqitemp=jacobianeqi;
-    for i=1:1:n
-        jacobiandisp(i,:)=jacobiandisptemp(n+1-i,:);
-        if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-            jacobianstroke(i,:)=jacobianstroketemp(n+1-i,:);
-        end
-        jacobianeqi(i,:)=jacobianeqitemp(n+1-i,:);
     
-    end
-end
 
-%% fourier series version of all gradients
-
-% We then obtain gradients in a fourier series parametrization by
-% projecting the gradients from the direct transcription space onto the
-% fourier coefficient space
-jacobiandispfourier = zeros(2,dimension);
-jacobianstrokefourier = zeros(2,dimension);
-jacobianeqifourier = zeros(2,dimension);
-for i=1:1:dimension
-    for j=1:1:2 
-        jacobiandispfourier(j,i)=chy{i}(j,:)*jacobiandisp(:,i);
-        if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-            jacobianstrokefourier(j,i)=chy{i}(j,:)*jacobianstroke(:,i);
-        end
-        jacobianeqifourier(j,i)=chy{i}(j,:)*jacobianeqi(:,i);
-    end
-end
-if strcmpi(s.costfunction,'torque') || strcmpi(s.costfunction,'covariant acceleration') || strcmpi(s.costfunction,'acceleration coord') || strcmpi(s.costfunction,'power quality')
-    % Inertia cost gradient is already in terms of the fourier coefficients
-    jacobianstrokefourier = inertia_cost_grad;
-    % Add zero terms to the gradient of displacement and jacobianeqi for
-    % frequency terms, since the inertia gradient includes those terms
-    jacobiandispfourier = [jacobiandispfourier;zeros(1,dimension)];
-    jacobianeqifourier = [jacobianeqifourier;zeros(1,dimension)];
-    % Calculate the total gradient of efficiency
-    % jacobianeqifourier commented out at Hossein's suggestion - don't
-    % necessarily want the points to all be equally spaced
-    totaljacobianfourier = jacobiandispfourier/totalstroke-lineint*jacobianstrokefourier/totalstroke^2;%+jacobianeqifourier;
-    % reset the gradient of the frequency terms to be zero so they aren't
-    % changed
-    totaljacobianfourier(end,:) = zeros(1,dimension);
-else
-    totaljacobianfourier = jacobiandispfourier/totalstroke-lineint*jacobianstrokefourier/totalstroke^2+jacobianeqifourier;
-end
-
-%% calcuating xdot so that lagrange equation is zero.
-    lambda = pinv(jacobiandispfourier(:,1))*jacobianstrokefourier(:,1);
-    xdot = jacobianstrokefourier(:,1)-0.98*lambda*jacobiandispfourier(:,1);
-    xdot = -xdot;
-    if isnan(xdot)
-        xdot = [0;0];
-    end
 end

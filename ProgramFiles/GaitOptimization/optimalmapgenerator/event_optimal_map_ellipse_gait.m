@@ -32,11 +32,11 @@ function [value,isterminal,direction] = event_optimal_map_ellipse_gait(x,s,npoin
     % The value that we want to be zero
     value = 1;
     % Record the fourier coefficient at step-optimal gaits.
-    if abs(disp/bestDisp-3/4) < 1e-2
+    if abs(disp/bestDisp-3/4) < 5e-2
         stepOptimalGaits{2} = x;
-    elseif abs(disp/bestDisp-2/4) < 1e-2
+    elseif abs(disp/bestDisp-2/4) < 5e-2
         stepOptimalGaits{3} = x;
-    elseif abs(disp/bestDisp-1/4) < 1e-2
+    elseif abs(disp/bestDisp-1/4) < 5e-2
         stepOptimalGaits{4} = x;
         value = 0;
     end

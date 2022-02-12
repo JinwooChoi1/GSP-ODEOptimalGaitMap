@@ -1,4 +1,4 @@
-function [value,isterminal,direction] = event_optimal_map(y,s,dimension,direction)
+function [value,isterminal,direction] = event_optimal_map(y,s,dimension,direction,nfparam)
 %%%%%%%%%
 %
 % This function will record each step-optimal gaits and stop ode solver.
@@ -20,37 +20,13 @@ function [value,isterminal,direction] = event_optimal_map(y,s,dimension,directio
 %   Specify direction = [] to use the default value of 0 for all events.
 %%%%%%%%%
 
-global bestDisp stepOptimalGaits;
-
-y = reshape(y,[10 dimension]);
-w1=y(end,1);
-T = 2*pi/w1;
-
-p = makeGait(y);
-[~, temp_disp, cost] = evaluate_displacement_and_cost1(s,p,[0, T],'interpolated','fixed_step');
-disp = abs(temp_disp(direction));
+global currentDisp;
 
 % The value that we want to be zero
 value = 1;
 
-% Record the fourier coefficient at step-optimal gaits.
-if abs(disp/bestDisp-3/4) < 5e-3
-    stepOptimalGaits{2,1} = reshape(y,[10 dimension]);
-    stepOptimalGaits{2,2} = disp;
-    stepOptimalGaits{2,3} = cost;
-elseif abs(disp/bestDisp-2/4) < 5e-3
-    stepOptimalGaits{3} = reshape(y,[10 dimension]);
-    stepOptimalGaits{3,2} = disp;
-    stepOptimalGaits{3,3} = cost;
-elseif abs(disp/bestDisp-1/4) < 5e-3
-    stepOptimalGaits{4} = reshape(y,[10 dimension]);
-    stepOptimalGaits{4,2} = disp;
-    stepOptimalGaits{4,3} = cost;
-    value = 0;
-end
-
 % ode solver stops when the gait displacements become zero.
-if disp < 1e-3
+if currentDisp < 1e-3
     value = 0;
 end
 % Halt integration
@@ -59,4 +35,3 @@ isterminal = 1;
 direction = 0;
 
 end
-

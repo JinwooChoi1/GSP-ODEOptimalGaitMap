@@ -188,8 +188,8 @@ chy=cell(dimension,1);
 % Create vector of time values at which to evaluate points of gait
 t = linspace(0,T,n);
 for j=1:1:n
-    chy{1}(:,j)=[cos(t(j))*cos(pi/4); -sin(t(j))*sin(pi/4)];
-    chy{2}(:,j)=[cos(t(j))*sin(pi/4); sin(t(j))*cos(pi/4)];
+    chy{1}(:,j)=[cos(t(j)-pi/4);0];
+    chy{2}(:,j)=[0; cos(t(j))];
 end
 
 %% Jacobianstroke is the gradient of cost. 
@@ -250,18 +250,18 @@ end
 % We then obtain gradients in a fourier series parametrization by
 % projecting the gradients from the direct transcription space onto the
 % fourier coefficient space
-jacobiandispfourier = zeros(2,dimension);
-jacobianstrokefourier = zeros(2,dimension);
-jacobianeqifourier = zeros(2,dimension);
-for i=1:1:dimension
-    for j=1:1:2
-        jacobiandispfourier(j,i)=chy{i}(j,:)*jacobiandisp(:,i);
-        if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
-            jacobianstrokefourier(j,i)=chy{i}(j,:)*jacobianstroke(:,i);
-        end
-        jacobianeqifourier(j,i)=chy{i}(j,:)*jacobianeqi(:,i);
+jacobiandispfourier = zeros(2,1);
+jacobianstrokefourier = zeros(2,1);
+jacobianeqifourier = zeros(2,1);
+
+for j=1:1:2
+    jacobiandispfourier(j)=chy{1}(j,:)*jacobiandisp(:,1)+chy{2}(j,:)*jacobiandisp(:,2);
+    if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
+        jacobianstrokefourier(j)=chy{1}(j,:)*jacobianstroke(:,1)+chy{2}(j,:)*jacobianstroke(:,2);
     end
+    jacobianeqifourier(j)=chy{1}(j,:)*jacobianeqi(:,1)+chy{2}(j,:)*jacobianeqi(:,2);
 end
+
 if strcmpi(s.costfunction,'torque') || strcmpi(s.costfunction,'covariant acceleration') || strcmpi(s.costfunction,'acceleration coord') || strcmpi(s.costfunction,'power quality')
     % Inertia cost gradient is already in terms of the fourier coefficients
     jacobianstrokefourier = inertia_cost_grad;
@@ -277,7 +277,7 @@ if strcmpi(s.costfunction,'torque') || strcmpi(s.costfunction,'covariant acceler
     % changed
     totaljacobianfourier(end,:) = zeros(1,dimension);
 else
-    totaljacobianfourier = jacobiandispfourier(:,1)/totalstroke-lineint*jacobianstrokefourier(:,1)/totalstroke^2+jacobianeqifourier(:,1);
+    totaljacobianfourier = jacobiandispfourier/totalstroke-lineint*jacobianstrokefourier/totalstroke^2+jacobianeqifourier;
 end
 
 %% minimizing negative of efficiency(or displacement)

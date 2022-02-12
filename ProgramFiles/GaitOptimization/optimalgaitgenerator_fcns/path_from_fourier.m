@@ -18,9 +18,15 @@ function y = path_from_fourier(f,n,dimension)
     % value in t
     for j=1:dimension
         for i=1:1:n+1
-            y(i,j)=f(1,j)+f(2,j)*cos(w*t(i))+f(3,j)*sin(w*t(i))+f(4,j)*cos(2*w*t(i))+...
-                +f(5,j)*sin(2*w*t(i))+f(6,j)*cos(3*w*t(i))+f(7,j)*sin(3*w*t(i))+...
-                +f(8,j)*cos(4*w*t(i))+f(9,j)*sin(4*w*t(i));
+            for k = 1:1:size(f,1)-1
+                if k == 1
+                    y(i,j) = y(i,j) + f(k,j);
+                elseif mod(k,2) == 0
+                    y(i,j) = y(i,j) + f(k,j)*cos(floor(k/2)*w*t(i));
+                else
+                    y(i,j) = y(i,j) + f(k,j)*sin(floor(k/2)*w*t(i));
+                end
+            end
         end
     end
 end

@@ -50,6 +50,10 @@ P1 = a;
 % to a fourier based parametrization.
 % fa is a cell where the ith element contains the coefficients for the fourier parametrization along the ith direction
 
+% set the number of the fourier coefficient.
+nfourier = 1;
+strfit = strcat('fourier',num2str(nfourier));
+
 % Time period of gait is 1 second in order to handle calculations performed
 % for inertial gait optimization
 t = linspace(0,1,size(P1,1));
@@ -57,12 +61,12 @@ t = linspace(0,1,size(P1,1));
 fa=cell(dimension);
 % The bounds ensure the fourier series terms have the right period
 % Bound only the frequency to be 2*pi, such that period = 1
-options = fitoptions('fourier4');
-options.Lower = [-Inf -Inf -Inf -Inf -Inf -Inf -Inf -Inf -Inf 2*pi];
-options.Upper = -[-Inf -Inf -Inf -Inf -Inf -Inf -Inf -Inf -Inf -2*pi];
+options = fitoptions(strfit);
+options.Lower = [-Inf(1,2*nfourier + 1) 2*pi];
+options.Upper = -[-Inf(1,2*nfourier + 1) -2*pi];
 
 for i=1:1:dimension
-    fa{i}=fit(t',P1(:,i),'fourier4',options);
+    fa{i}=fit(t',P1(:,i),strfit,options);
 end
 
 %% The next step is to setup the fmincon call.
@@ -77,7 +81,22 @@ b=[];
 Aeq=[];
 beq=[];
 
-nu={'a0';'a1';'b1';'a2';'b2';'a3';'b3';'a4';'b4';'w'};
+nfparam = (nfourier+1)*2;
+nu = cell(nfparam,1);
+
+% generate the coefficient string, based on the parameter number.
+% nu={'a0';'a1';'b1';'a2';'b2';'a3';'b3';'a4';'b4';'w'};
+for i = 1:nfparam
+    if i == 1
+        nu{i} = 'a0';
+    elseif i == nfparam
+        nu{i} = 'w';
+    elseif mod(i,2) == 0
+        nu{i} = strcat('a',num2str(floor(i/2)));
+    elseif mod(i,2) == 1
+        nu{i} = strcat('b',num2str(floor(i/2)));
+    end
+end
 lb1=[];
 ub1=[];
 
@@ -138,12 +157,12 @@ end
 stepOptimalGaits{1,1} = yf;
 stepOptimalGaits{1,2} = bestDisp;
 stepOptimalGaits{1,3} = bestCost;
-y0 = reshape(yf,[10*dimension 1]);
+y0 = reshape(yf,[nfparam*dimension 1]);
 
-odeoption=odeset('Events',@(t,y) event_optimal_map(y,s,dimension,direction));
-ode_fun = @(t,y) ode_optimal_map(y,s,npoints,dimension,direction);
+odeoption=odeset('Events',@(t,y) event_optimal_map(y,s,dimension,direction,nfparam));
+ode_fun = @(t,y) ode_optimal_map(y,s,npoints,dimension,direction,nfparam);
 
-[~,yf,~,ye,ie]=ode45(ode_fun,[0 inf],y0,odeoption);
+[t,yf,~,ye,ie]=ode45(ode_fun,[0 inf],y0,odeoption);
 
 %% Getting point position values from the result of fmincon
 % This section helps us go back to a direct transcription parametrization
@@ -151,7 +170,6 @@ ode_fun = @(t,y) ode_optimal_map(y,s,npoints,dimension,direction);
 % that contains coordinates of all points forming the optimized gait
 
 %% Break Here
-
 y1 = path_from_fourier(yf,npoints,dimension);
 % path_from_fourier returns a self-connected gait, so remove the last point
 % to give what optimalgaitgenerator expects to return

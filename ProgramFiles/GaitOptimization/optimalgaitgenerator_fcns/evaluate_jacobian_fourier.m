@@ -196,10 +196,19 @@ end
 
 chy=cell(dimension,1);
 % Create vector of time values at which to evaluate points of gait
+fourorder = length(coeff)-1;
 t = linspace(0,T,n);
 for i=1:1:dimension
     for j=1:1:n
-        chy{i}(:,j)=[1;cos(t(j)*coeff(end,i));sin(t(j)*coeff(end,i));cos(2*t(j)*coeff(end,i));sin(2*t(j)*coeff(end,i));cos(3*t(j)*coeff(end,i));sin(3*t(j)*coeff(end,i));cos(4*t(j)*coeff(end,i));sin(4*t(j)*coeff(end,i))];%cos(5*t(j)*coeff(end,i));sin(5*t(j)*coeff(end,i))];%;cos(6*t(j)*coeff(end,i));sin(6*t(j)*coeff(end,i))];%
+        for k = 1:1:fourorder
+            if k == 1
+                chy{i}(k,j) = 1;
+            elseif mod(k,2) == 0
+                chy{i}(k,j) = cos(floor(k/2)*t(j)*coeff(end,i));
+            else
+                chy{i}(k,j) = sin(floor(k/2)*t(j)*coeff(end,i));
+            end
+        end
     end
 end
 
@@ -262,12 +271,12 @@ end
 % projecting the gradients from the direct transcription space onto the
 % fourier coefficient space
 jacobfourier=struct();
-jacobfourier.disp = zeros(9,dimension);
-jacobfourier.stroke = zeros(9,dimension);
-jacobfourier.eqi = zeros(9,dimension);
+jacobfourier.disp = zeros(fourorder,dimension);
+jacobfourier.stroke = zeros(fourorder,dimension);
+jacobfourier.eqi = zeros(fourorder,dimension);
 
 for i=1:1:dimension
-    for j=1:1:9 
+    for j=1:1:fourorder
         jacobfourier.disp(j,i)=chy{i}(j,:)*jacobiandisp(:,i);
         if strcmpi(s.costfunction,'pathlength coord') || strcmpi(s.costfunction,'pathlength metric') || strcmpi(s.costfunction,'pathlength metric2')
             jacobfourier.stroke(j,i)=chy{i}(j,:)*jacobianstroke(:,i);
