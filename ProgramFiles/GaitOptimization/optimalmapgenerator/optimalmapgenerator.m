@@ -155,9 +155,10 @@ end
 
 %% Find optimal map by ode solver
 % store and start optimize from the parameters of optimal gaits over the system 
+jacobfourier = evaluate_jacobian_fourier(yf,s,npoints,dimension,direction);
 stepOptimalGaits{1,1} = yf;
-stepOptimalGaits{1,2} = bestDisp;
-stepOptimalGaits{1,3} = bestCost;
+stepOptimalGaits{1,2} = [bestDisp, bestCost];
+stepOptimalGaits{1,3} = [jacobfourier.disp jacobfourier.stroke];
 y0 = reshape(yf,[nfparam*dimension 1]);
 
 odeoption=odeset('Events',@(t,y) event_optimal_map(y,s,dimension,direction,nfparam));
