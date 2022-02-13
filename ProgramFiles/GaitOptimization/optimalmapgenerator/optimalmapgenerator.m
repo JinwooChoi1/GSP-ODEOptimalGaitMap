@@ -122,8 +122,9 @@ writerObj = [];
 % hold on
 
 s.costfunction = costfunction;
-global bestCost bestDisp bestEff stepOptimalGaits;
+global bestCost bestDisp bestEff stepOptimalGaits currentDisp;
 bestEff = 0;
+currentDisp = 0;
 stepOptimalGaits = cell(4,3);
 
 %Suppress warning for annoying thing in jacobianeqicalculator
